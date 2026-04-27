@@ -635,7 +635,7 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
     }
 
     if (!args[0]) {
-        return reply(`📌 *Usᴀɢᴇ:* autoview on/off\n*Cᴜʀʀᴇɴᴛ:* ${userConfig.AUTO_STATUS_SEEN}`);
+        return reply(`📌 *Usᴀɢᴇ:* autoview on/off\n*Cᴜʀʀᴇɴᴛ:* ${userConfig.AUTO_VIEW_STATUS}`);
     }
 
     const value = args[0].toLowerCase();
@@ -644,7 +644,7 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
     }
 
     const newValue = value === 'on' ? 'true' : 'false';
-    userConfig.AUTO_STATUS_SEEN = newValue;
+    userConfig.AUTO_VIEW_STATUS = newValue;
     await updateUserConfig(sanitizedNumber, userConfig);
     
     await reply(`✅ *Aᴜᴛᴏ Vɪᴇᴡ Sᴛᴀᴛᴜs sᴇᴛ ᴛᴏ:* ${newValue}`);
