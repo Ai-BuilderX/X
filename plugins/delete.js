@@ -23,22 +23,28 @@ cmd({
         // Check if message is quoted
         if (!m.quoted) return reply('❌ Please reply to a message to delete it!');
         
-        // Create the delete key
-        const key = {
+        // Delete the quoted message
+        const quotedKey = {
             remoteJid: m.chat,
             fromMe: false,
             id: m.quoted.id,
             participant: m.quoted.sender
         };
+        await conn.sendMessage(m.chat, { delete: quotedKey });
         
-        // Delete the quoted message
-        await conn.sendMessage(m.chat, { delete: key });
+        // Delete the command message itself
+        const commandKey = {
+            remoteJid: m.chat,
+            fromMe: true,
+            id: m.id
+        };
+        await conn.sendMessage(m.chat, { delete: commandKey });
         
-        // Optional: Send confirmation (can be removed if you don't want any response)
-        await reply('✅ Message deleted successfully!');
+        // No confirmation message sent - silent delete
         
     } catch (err) {
         console.error(err);
+        // Only error message sent if something fails
         await reply('❌ Failed to delete message. Something went wrong.');
     }
 });
