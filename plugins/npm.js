@@ -1,10 +1,9 @@
-// plugins/npm.js - ESM Version (Both Search & Download)
+// plugins/npm.js - Fixed ESM Version
 import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { cmd } from '../command.js';
 import axios from 'axios';
 import fs from 'fs';
-import path from 'path';
-import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,45 +20,50 @@ cmd({
     use: ".npm <package-name>"
 }, async (conn, mek, msg, { from, args, reply }) => {
     try {
-        // Check if a package name is provided
         if (!args.length) {
-            return reply("Please provide the name of the npm package you want to search for. Example: .npm express");
+            return reply("❌ Please provide a package name!\n\nExample: .npm axios");
         }
 
         const packageName = args.join(" ");
-        const apiUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}`;
-
-        // Fetch package details from npm registry
-        const response = await axios.get(apiUrl);
-        if (response.status !== 200) {
-            throw new Error("Package not found or an error occurred.");
+        
+        // Proper encoding for scoped packages
+        let encodedPkg = encodeURIComponent(packageName);
+        if (packageName.startsWith('@')) {
+            encodedPkg = `@${encodeURIComponent(packageName.slice(1))}`;
         }
+        
+        const apiUrl = `https://registry.npmjs.org/${encodedPkg}`;
+        const response = await axios.get(apiUrl, { timeout: 10000 });
 
-        const packageData = response.data;
-        const latestVersion = packageData["dist-tags"].latest;
-        const description = packageData.description || "No description available.";
+        const data = response.data;
+        const latestVersion = data["dist-tags"].latest;
+        const description = data.description || "No description available.";
         const npmUrl = `https://www.npmjs.com/package/${packageName}`;
-        const license = packageData.license || "Unknown";
-        const repository = packageData.repository ? packageData.repository.url : "Not available";
+        const license = data.license || "Unknown";
+        const repository = data.repository?.url || "Not available";
+        const author = data.author?.name || "Unknown";
 
-        // Create the response message
         const message = `
-*KHAN-MD NPM SEARCH*
+📦 *NPM PACKAGE INFO*
 
-*🔰 NPM PACKAGE:* ${packageName}
-*📄 DESCRIPTION:* ${description}
-*⏸️ LAST VERSION:* ${latestVersion}
-*🪪 LICENSE:* ${license}
-*🪩 REPOSITORY:* ${repository}
-*🔗 NPM URL:* ${npmUrl}
+🔰 *Package:* ${packageName}
+📄 *Description:* ${description}
+📌 *Version:* ${latestVersion}
+👤 *Author:* ${author}
+🪪 *License:* ${license}
+🪩 *Repository:* ${repository}
+🔗 *URL:* ${npmUrl}
+
+💡 *Download:* .dlnpm ${packageName}
+
+> *Powered By KHAN-MD*
 `;
 
-        // Send the message
         await conn.sendMessage(from, { text: message }, { quoted: mek });
 
     } catch (error) {
-        console.error("Error:", error);
-        reply("An error occurred: " + error.message);
+        console.error("NPM Search Error:", error.message);
+        reply("❌ Package not found on npm registry!");
     }
 });
 
@@ -68,82 +72,99 @@ cmd({
 // ===============================
 cmd({
     pattern: "dlnpm",
-    desc: "Download npm package as tgz (supports scoped packages)",
+    desc: "Download npm package as tgz",
     category: "download",
     react: "📦",
     filename: __filename
-},
-async (conn, mek, m, { from, args, q, reply, react }) => {
+}, async (conn, mek, m, { from, q, reply, react }) => {
     try {
         if (!q) {
-            return reply(
-                "❌ *Please provide a package name!*\n\n*Examples:*\n.dlnpm express\n.dlnpm @react-native/core\n.dlnpm lodash"
-            );
+            return reply("❌ Please provide a package name!\n\nExamples:\n.dlnpm axios\n.dlnpm @fadeldev/baileys-mod");
         }
 
         const pkg = q.trim();
-        const encodedPkg = encodeURIComponent(pkg);
-
-        // Create temp directory if it doesn't exist
-        const tempDir = path.join(__dirname, '../temp');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-        // Send processing reaction
         await react("⏳");
 
-        // 1️⃣ Fetch package info (scoped-safe)
-        const infoUrl = `https://registry.npmjs.org/${encodedPkg}`;
-        const infoRes = await axios.get(infoUrl).catch(() => null);
+        // Create temp directory
+        const tempDir = join(__dirname, '../temp');
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-        if (!infoRes || !infoRes.data) {
-            await react("❌");
-            return reply("❌ Package not found on npm registry!");
+        // Proper encoding for scoped packages
+        let encodedPkg = encodeURIComponent(pkg);
+        if (pkg.startsWith('@')) {
+            encodedPkg = `@${encodeURIComponent(pkg.slice(1))}`;
         }
 
-        const data = infoRes.data;
-        const latest = data['dist-tags'].latest;
-        const tarballUrl = data.versions[latest].dist.tarball;
+        // 1️⃣ Get package metadata from npm registry
+        const registryUrl = `https://registry.npmjs.org/${encodedPkg}`;
+        const metadata = await axios.get(registryUrl, { timeout: 15000 });
+        
+        // 2️⃣ Get latest version
+        const latestVersion = metadata.data["dist-tags"].latest;
+        
+        // 3️⃣ Get the CORRECT tarball URL from dist.tarball
+        const tarballUrl = metadata.data.versions[latestVersion].dist.tarball;
+        
+        if (!tarballUrl) {
+            throw new Error("Tarball URL not found");
+        }
 
-        // Safe filename (no / or @)
-        const safeName = pkg.replace('@', '').replace('/', '-');
-        const fileName = `${safeName}-${latest}.tgz`;
-        const filePath = path.join(tempDir, fileName);
-
-        // 2️⃣ Download tarball
-        const tarballRes = await axios.get(tarballUrl, {
-            responseType: 'arraybuffer'
+        // 4️⃣ Download tarball with redirect handling
+        const tarball = await axios.get(tarballUrl, {
+            responseType: 'arraybuffer',
+            maxRedirects: 5,
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'npm-download-bot/1.0'
+            }
         });
 
-        fs.writeFileSync(filePath, tarballRes.data);
+        if (!tarball.data || tarball.data.length === 0) {
+            throw new Error("Downloaded file is empty");
+        }
 
-        // 3️⃣ Send file
-        await conn.sendMessage(
-            from,
-            {
-                document: fs.readFileSync(filePath),
-                mimetype: 'application/gzip',
-                fileName: fileName,
-                caption: `📦 *NPM Package Downloaded*
+        // 5️⃣ Save file
+        const safeName = pkg.replace(/^@/, '').replace(/\//g, '-');
+        const fileName = `${safeName}-${latestVersion}.tgz`;
+        const filePath = join(tempDir, fileName);
+        
+        fs.writeFileSync(filePath, tarball.data);
+        const fileSize = (tarball.data.length / 1024).toFixed(2);
+
+        // 6️⃣ Send file
+        await conn.sendMessage(from, {
+            document: fs.readFileSync(filePath),
+            mimetype: 'application/gzip',
+            fileName: fileName,
+            caption: `📦 *NPM Package Downloaded*
 
 • *Name:* ${pkg}
-• *Version:* ${latest}
-• *Size:* ${(tarballRes.data.length / 1024).toFixed(2)} KB
+• *Version:* ${latestVersion}
+• *Size:* ${fileSize} KB
 • *Format:* .tgz
 
-> *Powered By KHAN-MD 🤖*`
-            },
-            { quoted: mek }
-        );
+> *Powered By KHAN-MD*`
+        }, { quoted: mek });
 
-        // Clean up temp file
+        // 7️⃣ Cleanup
         fs.unlinkSync(filePath);
-        
-        // Success reaction
         await react("✅");
 
-    } catch (err) {
-        console.error("DLNPM Error:", err);
+    } catch (error) {
+        console.error("DLNPM Error:", error.message);
         await react("❌");
-        reply("❌ Failed to download npm package!\n\n" + (err.message || "Unknown error"));
+        
+        let errorMsg = "❌ Failed to download package!\n\n";
+        if (error.response?.status === 404) {
+            errorMsg += "Package not found on npm registry.";
+        } else if (error.code === 'ECONNABORTED') {
+            errorMsg += "Download timeout. Package might be too large.";
+        } else if (error.code === 'ENOTFOUND') {
+            errorMsg += "Network error. Check your connection.";
+        } else {
+            errorMsg += error.message;
+        }
+        
+        reply(errorMsg);
     }
 });
