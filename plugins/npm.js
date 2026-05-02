@@ -1,4 +1,3 @@
-// plugins/npm.js - Fixed ESM Version
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { cmd } from '../command.js';
