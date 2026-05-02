@@ -1,4 +1,3 @@
-// plugins/ytdl-ultra.js - ESM Version (FIXED)
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import config from '../config.js';
