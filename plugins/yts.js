@@ -1,4 +1,3 @@
-// plugins/yts.js - ESM Version (FIXED)
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import yts from 'yt-search';
