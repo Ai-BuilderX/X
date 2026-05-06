@@ -48,15 +48,19 @@ const getMediaType = (url) => {
     return null;
 };
 
-// Get all categories and organize them
+// Get all categories and organize them alphabetically
 const getCategorizedCommands = () => {
     const commandsArray = Array.isArray(commands) ? commands : Object.values(commands);
     let totalCommands = commandsArray.length;
     const categories = [...new Set(commandsArray.map(c => c.category))].filter(cat => 
         cat && cat.trim() !== '' && cat !== 'undefined'
     );
+    
+    // Sort categories alphabetically
+    const sortedCategories = categories.sort((a, b) => a.localeCompare(b));
+    
     const categorized = {};
-    categories.forEach(cat => {
+    sortedCategories.forEach(cat => {
         const categoryCommands = commandsArray.filter(c => c.category === cat);
         const validCommands = categoryCommands.filter(cmd => cmd.pattern && cmd.pattern.trim() !== '');
         if (validCommands.length > 0) categorized[cat] = validCommands;
@@ -99,9 +103,12 @@ async (conn, mek, m, { from, sender, reply, userConfig }) => {
             cat && cat.trim() !== '' && cat !== 'undefined'
         );
         
+        // Sort categories alphabetically (A to Z)
+        const sortedCategories = categories.sort((a, b) => a.localeCompare(b));
+        
         // Organize commands by category and filter out empty categories
         const categorized = {};
-        categories.forEach(cat => {
+        sortedCategories.forEach(cat => {
             const categoryCommands = commandsArray.filter(c => c.category === cat);
             // Only add category if it has valid commands
             const validCommands = categoryCommands.filter(cmd => cmd.pattern && cmd.pattern.trim() !== '');
@@ -110,7 +117,7 @@ async (conn, mek, m, { from, sender, reply, userConfig }) => {
             }
         });
 
-        // Build menu sections - only for categories that have commands
+        // Build menu sections - sorted alphabetically
         let menuSections = '';
         for (const [category, cmds] of Object.entries(categorized)) {
             if (cmds && cmds.length > 0) {
@@ -123,12 +130,12 @@ async (conn, mek, m, { from, sender, reply, userConfig }) => {
 
         // Main menu text with new bar styles
         let dec = `*╭┈───〔 ${BOT_NAME} 〕┈───⊷*
-*├▢ 🤖 Owner:* ${OWNER_NAME}
-*├▢ 📜 Commands:* ${totalCommands}
-*├▢ ⏱️ Runtime:* ${runtime(process.uptime())}
-*├▢ 📦 Prefix:* ${PREFIX}
-*├▢ ⚙️ Mode:* ${MODE}
-*├▢ 🏷️ Version:* ${VERSION}
+*├✦ Owner:* ${OWNER_NAME}
+*├✦ Commands:* ${totalCommands}
+*├✦ Runtime:* ${runtime(process.uptime())}
+*├✦ Prefix:* ${PREFIX}
+*├✦ Mode:* ${MODE}
+*├✦ Version:* ${VERSION}
 *╰───────────────────⊷*
 ${menuSections}
 
