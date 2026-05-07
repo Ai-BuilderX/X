@@ -9,10 +9,8 @@ import { Sticker, StickerTypes } from "wa-sticker-formatter";
 
 const __filename = fileURLToPath(import.meta.url);
 
-// Telegram Sticker API configuration
-const stickerAPI = {
-    baseURL: "https://jawad-tech.vercel.app/tgsticker"
-};
+// Telegram Bot Token
+const BOT_TOKEN = '8717187428:AAHo9IgdtcQztOT572ixLJNSliFSulA_30M';
 
 cmd({
     pattern: "tsticker",
@@ -41,27 +39,71 @@ cmd({
         
         await reply("📦 Downloading sticker pack... Please wait!");
 
-        // Get sticker pack data from API
-        const apiUrl = `${stickerAPI.baseURL}?url=${encodeURIComponent(q)}`;
+        // Extract pack name from URL
+        let packName = q.replace("https://t.me/addstickers/", "").replace("http://t.me/addstickers/", "").replace("https://telegram.me/addstickers/", "").replace("http://telegram.me/addstickers/", "");
+        packName = packName.split('?')[0].trim();
+
+        if (!packName) {
+            return await reply("❌ Invalid sticker pack URL!");
+        }
+
+        // Fetch sticker pack info from Telegram API
+        const apiURL = `https://api.telegram.org/bot${BOT_TOKEN}/getStickerSet?name=${encodeURIComponent(packName)}`;
         
-        const res = await axios.get(apiUrl, {
+        const response = await axios.get(apiURL, {
             timeout: 30000,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'accept': '*/*'
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0"
             }
         });
 
-        if (!res.data || !res.data.status || !res.data.result || !res.data.result.stickers) {
-            return await reply("❌ Failed to fetch sticker pack. Invalid URL or API error.");
+        const stickerSet = response.data;
+
+        if (!stickerSet.ok || !stickerSet.result) {
+            return await reply("❌ Sticker pack not found or invalid!");
         }
 
-        const stickerData = res.data.result;
-        const stickers = stickerData.stickers;
+        // Process stickers to get download URLs
+        const stickers = [];
+        
+        for (const sticker of stickerSet.result.stickers) {
+            try {
+                // Get file path for each sticker
+                const fileResponse = await axios.get(
+                    `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${sticker.file_id}`
+                );
 
-        if (!stickers || stickers.length === 0) {
-            return await reply("❌ No stickers found in this pack!");
+                if (fileResponse.data.ok && fileResponse.data.result.file_path) {
+                    const filePath = fileResponse.data.result.file_path;
+                    const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
+                    
+                    stickers.push({
+                        emoji: sticker.emoji || "❓",
+                        is_animated: sticker.is_animated || false,
+                        is_video: sticker.is_video || false,
+                        image_url: imageUrl,
+                        file_id: sticker.file_id
+                    });
+                }
+            } catch (fileError) {
+                console.error(`Error processing sticker ${sticker.file_id}:`, fileError.message);
+                continue;
+            }
         }
+
+        if (stickers.length === 0) {
+            return await reply("❌ No stickers found or could not process stickers!");
+        }
+
+        const stickerData = {
+            name: stickerSet.result.name,
+            title: stickerSet.result.title,
+            sticker_type: stickerSet.result.sticker_type,
+            is_animated: stickerSet.result.is_animated || false,
+            is_video: stickerSet.result.is_video || false,
+            stickers: stickers
+        };
 
         // Send sticker pack info
         await reply(`📦 *Sticker Pack Info*\n\n` +
