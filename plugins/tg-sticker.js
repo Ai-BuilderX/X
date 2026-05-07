@@ -1,4 +1,3 @@
-// plugins/tsticker.js - ESM Version
 import { fileURLToPath } from 'url';
 import config from '../config.js';
 import { cmd } from '../command.js';
