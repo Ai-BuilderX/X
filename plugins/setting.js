@@ -1,4 +1,3 @@
-
 // JAWAD MD
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
