@@ -3,8 +3,10 @@ import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import axios from 'axios';
 import FormData from 'form-data';
+import path from 'path';  // ✅ ADD THIS LINE
 
 const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);  // Now path is defined
 
 cmd({
   pattern: "url",
