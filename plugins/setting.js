@@ -1,13 +1,16 @@
 
+// JAWAD MD
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
-import config from '../config.js';
-import path from 'path'; 
-import FormData from 'form-data';
 import axios from 'axios';
+import FormData from 'form-data';
+import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// ImgBB API Key (free, working)
+const IMGBB_API_KEY = '8db492efc937a635b90680a9a860dc85';
 
 // Helper function to extract number from JID
 function extractNumber(jid) {
@@ -16,7 +19,7 @@ function extractNumber(jid) {
 }
 
 // ===============================
-// BOT DP COMMAND - ESM Version (Fixed)
+// BOT DP COMMAND - Using ImgBB
 // ===============================
 cmd({
     pattern: "botdp",
@@ -26,7 +29,7 @@ cmd({
     react: "🖼️",
     filename: __filename
 },
-async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber, quoted }) => {
+async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfig, sanitizedNumber, quoted }) => {
     if (!isCreator) {
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
@@ -39,57 +42,30 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
             const quotedMsg = m.quoted;
             const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
             
-            if (!mimeType || !mimeType.startsWith("image")) {
-                return reply("❌ Please reply to an image.");
+            if (!mimeType || !mimeType.includes('image')) {
+                return reply("❌ Please reply to an image");
             }
+
+            await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
 
             const mediaBuffer = await quotedMsg.download();
 
-            // Extension mapping (same as url command)
-            let extension = '';
-            if (mimeType.includes('image/jpeg')) extension = '.jpg';
-            else if (mimeType.includes('image/png')) extension = '.png';
-            else if (mimeType.includes('image/webp')) extension = '.webp';
-            else extension = '.jpg';
-
-            const fileName = `botimage${extension}`;
-
-            // STEP 1: Upload to Uguu (same as url command)
+            // Upload to ImgBB (same as url command)
             const form = new FormData();
-            form.append('files[]', mediaBuffer, fileName);
+            form.append('key', IMGBB_API_KEY);
+            form.append('image', mediaBuffer.toString('base64'));
+            form.append('name', 'botdp');
 
-            const uguuResponse = await axios.post("https://uguu.se/upload", form, {
-                headers: {
-                    ...form.getHeaders(),
-                    "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile)"
-                },
+            const response = await axios.post("https://api.imgbb.com/1/upload", form, {
+                headers: form.getHeaders(),
                 timeout: 60000
             });
 
-            let uguuUrl = null;
-            if (uguuResponse.data && uguuResponse.data.files && uguuResponse.data.files[0]) {
-                uguuUrl = uguuResponse.data.files[0].url;
-            }
+            imageUrl = response.data?.data?.url;
 
-            if (!uguuUrl) {
-                throw new Error("Uguu upload failed - no URL returned");
-            }
+            if (!imageUrl) throw new Error("Upload failed - no URL returned");
 
-            // STEP 2: Upload to Catbox via URL method (same as url command)
-            const catboxForm = new FormData();
-            catboxForm.append('reqtype', 'urlupload');
-            catboxForm.append('userhash', '');
-            catboxForm.append('url', uguuUrl);
-
-            const catboxResponse = await axios.post("https://catbox.moe/user/api.php", catboxForm, {
-                headers: catboxForm.getHeaders()
-            });
-
-            imageUrl = catboxResponse.data?.trim();
-
-            if (!imageUrl || !imageUrl.startsWith('https://files.catbox.moe/')) {
-                throw new Error(`Catbox rejected the URL. Response: ${imageUrl || 'empty'}`);
-            }
+            await conn.sendMessage(from, { react: { text: "✅", key: mek.key } });
         }
 
         // If URL provided directly
@@ -101,29 +77,18 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
         userConfig.BOT_IMAGE = imageUrl;
         await updateUserConfig(sanitizedNumber, userConfig);
 
-        const fileSize = m.quoted ? formatBytes(m.quoted.download?.length || 0) : 'URL provided';
-        
-        // Send success message
-        await reply(
-            `*🖼️ Bot Display Picture Updated Successfully*\n\n` +
-            `*Size:* ${fileSize}\n` +
-            `*URL:* ${imageUrl}\n\n` +
-            `> © Updated by JawadTechX 💜`
-        );
+        // Send success message with the image
+        await conn.sendMessage(from, {
+            image: { url: imageUrl },
+            caption: `✅ *Bot Display Picture Updated Successfully!*\n\n📁 *Image URL:* ${imageUrl}\n\n> © Updated by JawadTechX 💜`
+        }, { quoted: mek });
 
     } catch (error) {
         console.error('BotDP Error:', error);
+        await conn.sendMessage(from, { react: { text: "❌", key: mek.key } });
         await reply(`❌ Error: ${error.message || error}`);
     }
 });
-
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
 
 // ===============================
 // WELCOME COMMAND
