@@ -2,16 +2,11 @@
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import config from '../config.js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import FormData from 'form-data';
 import axios from 'axios';
-import { lidToPhone, cleanPN } from '../lib/functions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 
 // Helper function to extract number from JID
 function extractNumber(jid) {
@@ -22,9 +17,6 @@ function extractNumber(jid) {
 // ===============================
 // BOT DP COMMAND - ESM Version
 // ===============================
-
-const __filename = fileURLToPath(import.meta.url);
-
 cmd({
     pattern: "botdp",
     alias: ["botimage", "botpic", "botphoto"],
@@ -229,8 +221,6 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
     await reply(`✅ *Goodbye ᴍᴇssᴀɢᴇ sᴇᴛ ᴛᴏ:*\n\n${goodbyeMessage}`);
 });
 
-
-
 // ===============================
 // BANLIST COMMAND
 // ===============================
@@ -270,7 +260,7 @@ cmd({
     pattern: "ban",
     alias: ["ban"],
     desc: "Ban a user from using the bot",
-    category: "moderation",
+    category: "settings",
     react: "🔨",
     filename: __filename
 },
@@ -300,9 +290,10 @@ async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfi
         return reply("🤖 I can't ban myself!");
     }
 
-    // Can't ban the owner (extract number from owner JID)
-    const ownerJid = config.OWNER_NUMBER.includes('@') ? config.OWNER_NUMBER : config.OWNER_NUMBER + '@s.whatsapp.net';
-    if (target === ownerJid) {
+    // Can't ban the owner (use userConfig.OWNER_NUMBER)
+    const ownerJid = userConfig.OWNER_NUMBER || config.OWNER_NUMBER;
+    const ownerWithSuffix = ownerJid.includes('@') ? ownerJid : ownerJid + '@s.whatsapp.net';
+    if (target === ownerWithSuffix) {
         return reply("👑 Cannot ban the owner!");
     }
 
@@ -326,7 +317,7 @@ cmd({
     pattern: "unban",
     alias: ["unban"],
     desc: "Unban a user from using the bot",
-    category: "moderation",
+    category: "settings",
     react: "🔓",
     filename: __filename
 },
@@ -460,6 +451,7 @@ async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfi
     
     await reply(`✅ *User removed from sudo list successfully!*\n\nUser: ${target}`);
 });
+
 // ===============================
 // LISTSUDO COMMAND
 // ===============================
@@ -588,7 +580,7 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
 });
 
 // ===============================
-// ANTI LINK COMMAND
+// ANTI LINK COMMAND - FIXED
 // ===============================
 cmd({
     pattern: "antilink",
@@ -598,13 +590,13 @@ cmd({
     react: "🚫",
     filename: __filename
 },
-async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
+async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfig, sanitizedNumber }) => {
     if (!isCreator) {
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
 
     if (!args[0]) {
-        return reply(`📌 *Usᴀɢᴇ:* antilink on/off/warn/delete\n*Cᴜʀʀᴇɴᴛ:* ${userConfig.ANTI_LINK || 'off'}\n\n*Oᴘᴛɪᴏɴs:*\n• on - Warn + delete links\n• off - Disable anti-link\n• warn - Only warn users\n• delete - Only delete messages`);
+        return reply(`📌 *Usᴀɢᴇ:* antilink on/off/warn/delete\n*Cᴜʀʀᴇɴᴛ:* ${userConfig.ANTI_LINK === 'true' ? 'on' : userConfig.ANTI_LINK === 'false' ? 'off' : userConfig.ANTI_LINK || 'off'}\n\n*Oᴘᴛɪᴏɴs:*\n• on - Warn + delete links\n• off - Disable anti-link\n• warn - Only warn users\n• delete - Only delete messages`);
     }
 
     const value = args[0].toLowerCase();
@@ -612,30 +604,30 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
         return reply("❌ Please use: on, off, warn, or delete");
     }
 
+    // Convert 'on' to 'true', 'off' to 'false', keep 'warn' and 'delete' as is
     let configValue;
-    let response = "";
+    let responseMsg = "";
     
     if (value === "on") {
         configValue = "true";
-        response = "✅ Anti-link set to ON\n\nUsers sending links will be warned and messages will be deleted.";
+        responseMsg = "✅ Anti-link set to ON\n\nUsers sending links will be warned and messages will be deleted.";
     } else if (value === "off") {
         configValue = "false";
-        response = "✅ Anti-link set to OFF\n\nNo link protection active.";
+        responseMsg = "✅ Anti-link set to OFF\n\nNo link protection active.";
     } else if (value === "warn") {
         configValue = "warn";
-        response = "✅ Anti-link set to WARN\n\nUsers will receive warnings when sending links, but messages won't be deleted.";
+        responseMsg = "✅ Anti-link set to WARN\n\nUsers will receive warnings when sending links, but messages won't be deleted.";
     } else if (value === "delete") {
         configValue = "delete";
-        response = "✅ Anti-link set to DELETE\n\nLink messages will be deleted without warning.";
+        responseMsg = "✅ Anti-link set to DELETE\n\nLink messages will be deleted without warning.";
     }
-    
+
     userConfig.ANTI_LINK = configValue;
     await updateUserConfig(sanitizedNumber, userConfig);
     
-    await reply(response);
+    await reply(responseMsg);
 });
 
-// ===============================
 // ANTI DELETE COMMAND
 // ===============================
 cmd({
@@ -1324,7 +1316,7 @@ async (conn, mek, m, { from, reply, isCreator, prefix, userConfig }) => {
 │ • autotyping on/off
 │ • online on/off
 │
-│ 📁 *settings*
+│ 📁 *Settings*
 │ • ban @user
 │ • unban @user
 │ • banlist
