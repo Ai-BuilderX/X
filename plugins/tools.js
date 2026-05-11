@@ -2,8 +2,11 @@ import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import axios from 'axios';
 import FormData from 'form-data';
+import path from 'path';
+
 
 const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Helper function to upload to Uguu (temporary, 3 hours)
 async function uploadToUguu(buffer, mimeType) {
