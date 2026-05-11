@@ -11,19 +11,6 @@ import { lidToPhone, cleanPN } from '../lib/functions.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Helper function to convert target to proper format
-async function getTargetJid(conn, target) {
-    if (!target) return null;
-    
-    if (target.includes('@s.whatsapp.net')) return target;
-    
-    if (target.includes('@lid')) {
-        const phoneNumber = await lidToPhone(conn, target);
-        return phoneNumber + '@s.whatsapp.net';
-    }
-    
-    return target.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-}
 
 // Helper function to extract number from JID
 function extractNumber(jid) {
@@ -31,12 +18,97 @@ function extractNumber(jid) {
     return jid.split('@')[0];
 }
 
-// Helper function to validate if target is a valid number
-function isValidNumber(target) {
-    if (!target) return false;
-    const number = target.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
-    return number.length >= 10;
-}
+// ===============================
+// BOT DP COMMAND - ESM Version
+// ===============================
+
+const __filename = fileURLToPath(import.meta.url);
+
+cmd({
+    pattern: "botdp",
+    alias: ["botimage", "botpic", "botphoto"],
+    desc: "Set bot display picture",
+    category: "settings",
+    react: "🖼️",
+    filename: __filename
+},
+async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber, quoted }) => {
+    if (!isCreator) {
+        return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
+    }
+
+    let imageUrl = args[0];
+
+    // If no URL provided but replied to an image
+    if (!imageUrl && m.quoted) {
+        const quotedMsg = m.quoted;
+        const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
+        if (!mimeType.startsWith("image")) return reply("❌ Please reply to an image.");
+
+        const mediaBuffer = await quotedMsg.download();
+
+        // Extension mapping
+        let extension = '';
+        if (mimeType.includes('jpeg')) extension = '.jpg';
+        else if (mimeType.includes('png')) extension = '.png';
+        else if (mimeType.includes('webp')) extension = '.webp';
+        else extension = '.jpg';
+
+        const fileName = `botimage${extension}`;
+
+        // STEP 1: Upload to Uguu
+        const form = new FormData();
+        form.append('files[]', mediaBuffer, fileName);
+
+        const uguuResponse = await axios.post("https://uguu.se/upload", form, {
+            headers: {
+                ...form.getHeaders(),
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile)"
+            },
+            timeout: 60000
+        });
+
+        let uguuUrl = null;
+        if (uguuResponse.data && uguuResponse.data.files && uguuResponse.data.files[0]) {
+            uguuUrl = uguuResponse.data.files[0].url;
+        }
+
+        if (!uguuUrl) {
+            throw "Uguu upload failed - no URL returned";
+        }
+
+        // STEP 2: Upload to Catbox via URL method
+        const catboxForm = new FormData();
+        catboxForm.append('reqtype', 'urlupload');
+        catboxForm.append('userhash', '');
+        catboxForm.append('url', uguuUrl);
+
+        const catboxResponse = await axios.post("https://catbox.moe/user/api.php", catboxForm, {
+            headers: catboxForm.getHeaders()
+        });
+
+        imageUrl = catboxResponse.data?.trim();
+
+        if (!imageUrl || !imageUrl.startsWith('https://files.catbox.moe/')) {
+            throw `Catbox rejected the URL. Response: ${imageUrl || 'empty'}`;
+        }
+    }
+
+    // If URL provided directly
+    if (!imageUrl || !imageUrl.startsWith("http")) {
+        return reply("❌ Provide a valid image URL or reply to an image.");
+    }
+
+    // Update user config with new bot image
+    userConfig.BOT_IMAGE = imageUrl;
+    await updateUserConfig(sanitizedNumber, userConfig);
+
+    // Send success message with the image
+    await conn.sendMessage(from, {
+        image: { url: imageUrl },
+        caption: `✅ *Bot Display Picture Updated!*\n\n📁 *Image URL:* ${imageUrl}\n\nImage will be used as bot's profile picture.`
+    }, { quoted: mek });
+});
 
 // ===============================
 // WELCOME COMMAND
@@ -156,6 +228,40 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
     await reply(`✅ *Goodbye ᴍᴇssᴀɢᴇ sᴇᴛ ᴛᴏ:*\n\n${goodbyeMessage}`);
 });
 
+
+
+// ===============================
+// BANLIST COMMAND
+// ===============================
+cmd({
+    pattern: "banlist",
+    alias: ["banlist", "banned"],
+    desc: "Show list of banned users",
+    category: "settings",
+    react: "📋",
+    filename: __filename
+},
+async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
+    if (!isCreator) {
+        return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
+    }
+
+    let bannedList = Array.isArray(userConfig.BANNED) ? userConfig.BANNED : [];
+
+    if (bannedList.length === 0) {
+        return reply("📋 *No banned users found.*");
+    }
+
+    let listText = "*📋 Banned Users List:*\n\n";
+    for (let i = 0; i < bannedList.length; i++) {
+        const user = bannedList[i];
+        const userNumber = extractNumber(user);
+        listText += `${i + 1}. ${userNumber}\n`;
+    }
+
+    await reply(listText);
+});
+
 // ===============================
 // BAN COMMAND
 // ===============================
@@ -167,31 +273,35 @@ cmd({
     react: "🔨",
     filename: __filename
 },
-async (conn, mek, m, { from, reply, botNumber2, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
+async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfig, sanitizedNumber }) => {
     if (!isCreator) {
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
 
+    // Get target JID directly from mentioned or quoted
     let target = m.mentionedJid?.[0] || (m.quoted?.sender ?? null);
 
+    // If args provided, check if it's a JID format
     if (!target && args[0]) {
-        const cleanedNumber = args[0].replace(/[^0-9]/g, '');
-        if (cleanedNumber && cleanedNumber.length >= 10) {
-            target = cleanedNumber + "@s.whatsapp.net";
+        if (args[0].includes('@')) {
+            target = args[0];
+        } else {
+            return reply("⚠️ Please mention the user or reply to their message.\n\n*Usage:* .ban @user or reply to user's message");
         }
     }
 
-    if (!target || !isValidNumber(target)) {
-        return reply("⚠️ Please provide a target to ban!\n\n*Usage:* .ban @user or .ban 92342758**** or reply to a message");
+    if (!target) {
+        return reply("⚠️ Please provide a target to ban!\n\n*Usage:* .ban @user or reply to a message");
     }
 
-    target = await getTargetJid(conn, target);
-    if (!target) return reply("❌ Invalid target format.");
-
-    if (target === conn.user.id.split(':')[0] + '@s.whatsapp.net' || target === botNumber2) 
+    // Can't ban the bot itself
+    if (target === conn.user.id) {
         return reply("🤖 I can't ban myself!");
-    
-    if (target.includes(extractNumber(config.OWNER_NUMBER))) {
+    }
+
+    // Can't ban the owner (extract number from owner JID)
+    const ownerJid = config.OWNER_NUMBER.includes('@') ? config.OWNER_NUMBER : config.OWNER_NUMBER + '@s.whatsapp.net';
+    if (target === ownerJid) {
         return reply("👑 Cannot ban the owner!");
     }
 
@@ -219,26 +329,26 @@ cmd({
     react: "🔓",
     filename: __filename
 },
-async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
+async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfig, sanitizedNumber }) => {
     if (!isCreator) {
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
 
+    // Get target JID directly from mentioned or quoted
     let target = m.mentionedJid?.[0] || (m.quoted?.sender ?? null);
 
+    // If args provided, check if it's a JID format
     if (!target && args[0]) {
-        const cleanedNumber = args[0].replace(/[^0-9]/g, '');
-        if (cleanedNumber && cleanedNumber.length >= 10) {
-            target = cleanedNumber + "@s.whatsapp.net";
+        if (args[0].includes('@')) {
+            target = args[0];
+        } else {
+            return reply("⚠️ Please mention the user or reply to their message.\n\n*Usage:* .unban @user or reply to user's message");
         }
     }
 
-    if (!target || !isValidNumber(target)) {
-        return reply("⚠️ Please provide a target to unban!\n\n*Usage:* .unban @user or .unban 92342758**** or reply to a message");
+    if (!target) {
+        return reply("⚠️ Please provide a target to unban!\n\n*Usage:* .unban @user or reply to a message");
     }
-
-    target = await getTargetJid(conn, target);
-    if (!target) return reply("❌ Invalid target format.");
 
     let bannedList = Array.isArray(userConfig.BANNED) ? [...userConfig.BANNED] : [];
 
@@ -254,72 +364,44 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
 });
 
 // ===============================
-// BANLIST COMMAND
-// ===============================
-cmd({
-    pattern: "banlist",
-    alias: ["banlist", "banned"],
-    desc: "Show list of banned users",
-    category: "moderation",
-    react: "📋",
-    filename: __filename
-},
-async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
-    if (!isCreator) {
-        return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
-    }
-
-    let bannedList = Array.isArray(userConfig.BANNED) ? userConfig.BANNED : [];
-
-    if (bannedList.length === 0) {
-        return reply("📋 *No banned users found.*");
-    }
-
-    let listText = "*📋 Banned Users List:*\n\n";
-    for (let i = 0; i < bannedList.length; i++) {
-        const user = bannedList[i];
-        const userNumber = extractNumber(user);
-        listText += `${i + 1}. ${userNumber}\n`;
-    }
-
-    await reply(listText);
-});
-
-// ===============================
 // SUDO COMMAND
 // ===============================
 cmd({
     pattern: "sudo",
     alias: ["sudo"],
     desc: "Add a user to sudo list",
-    category: "moderation",
+    category: "settings",
     react: "👑",
     filename: __filename
 },
-async (conn, mek, m, { from, reply, isCreator, args, prefix, botNumber2, updateUserConfig, userConfig, sanitizedNumber }) => {
+async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfig, sanitizedNumber }) => {
     if (!isCreator) {
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
 
+    // Get target JID directly from mentioned or quoted
     let target = m.mentionedJid?.[0] || (m.quoted?.sender ?? null);
 
+    // If args provided, try to match with @lid format
     if (!target && args[0]) {
-        const cleanedNumber = args[0].replace(/[^0-9]/g, '');
-        if (cleanedNumber && cleanedNumber.length >= 10) {
-            target = cleanedNumber + "@s.whatsapp.net";
+        // Check if args[0] is already a JID format (contains @)
+        if (args[0].includes('@')) {
+            target = args[0];
+        } else {
+            // Assume it's a number, but WhatsApp uses @lid now
+            return reply("⚠️ Please mention the user or reply to their message.\n\n*Usage:* .sudo @user or reply to user's message");
         }
     }
 
-    if (!target || !isValidNumber(target)) {
-        return reply("⚠️ Please provide a target to add to sudo!\n\n*Usage:* .sudo @user or .sudo 92342758**** or reply to a message");
+    if (!target) {
+        return reply("⚠️ Please provide a target to add to sudo!\n\n*Usage:* .sudo @user or reply to a message");
     }
 
-    target = await getTargetJid(conn, target);
-    if (!target) return reply("❌ Invalid target format.");
-
-    if (target === conn.user.id.split(':')[0] + '@s.whatsapp.net' || target === botNumber2) 
+    // Check if trying to sudo the bot itself
+    if (target === conn.user.id) {
         return reply("🤖 I can't sudo myself!");
-    
+    }
+
     let sudoList = Array.isArray(userConfig.SUDO) ? [...userConfig.SUDO] : [];
 
     if (sudoList.includes(target)) {
@@ -340,30 +422,30 @@ cmd({
     pattern: "delsudo",
     alias: ["delsudo", "removesudo"],
     desc: "Remove a user from sudo list",
-    category: "moderation",
+    category: "settings",
     react: "👑",
     filename: __filename
 },
-async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
+async (conn, mek, m, { from, reply, isCreator, args, updateUserConfig, userConfig, sanitizedNumber }) => {
     if (!isCreator) {
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
 
+    // Get target JID directly from mentioned or quoted
     let target = m.mentionedJid?.[0] || (m.quoted?.sender ?? null);
 
+    // If args provided, try to match with @lid format
     if (!target && args[0]) {
-        const cleanedNumber = args[0].replace(/[^0-9]/g, '');
-        if (cleanedNumber && cleanedNumber.length >= 10) {
-            target = cleanedNumber + "@s.whatsapp.net";
+        if (args[0].includes('@')) {
+            target = args[0];
+        } else {
+            return reply("⚠️ Please mention the user or reply to their message.\n\n*Usage:* .delsudo @user or reply to user's message");
         }
     }
 
-    if (!target || !isValidNumber(target)) {
-        return reply("⚠️ Please provide a target to remove from sudo!\n\n*Usage:* .delsudo @user or .delsudo 92342758**** or reply to a message");
+    if (!target) {
+        return reply("⚠️ Please provide a target to remove from sudo!\n\n*Usage:* .delsudo @user or reply to a message");
     }
-
-    target = await getTargetJid(conn, target);
-    if (!target) return reply("❌ Invalid target format.");
 
     let sudoList = Array.isArray(userConfig.SUDO) ? [...userConfig.SUDO] : [];
 
@@ -377,7 +459,6 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
     
     await reply(`✅ *User removed from sudo list successfully!*\n\nUser: ${target}`);
 });
-
 // ===============================
 // LISTSUDO COMMAND
 // ===============================
@@ -385,7 +466,7 @@ cmd({
     pattern: "listsudo",
     alias: ["listsudo", "sudoers"],
     desc: "Show list of sudo users",
-    category: "moderation",
+    category: "settings",
     react: "📋",
     filename: __filename
 },
@@ -1030,64 +1111,6 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
 });
 
 // ===============================
-// BOT DP COMMAND
-// ===============================
-cmd({
-    pattern: "botdp",
-    alias: ["botimage", "botpic", "botphoto"],
-    desc: "Set bot display picture",
-    category: "settings",
-    react: "🖼️",
-    filename: __filename
-},
-async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, userConfig, sanitizedNumber }) => {
-    if (!isCreator) {
-        return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
-    }
-
-    let imageUrl = args[0];
-
-    if (!imageUrl && m.quoted) {
-        const quotedMsg = m.quoted;
-        const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
-        if (!mimeType.startsWith("image")) return reply("❌ Please reply to an image.");
-
-        const mediaBuffer = await quotedMsg.download();
-        const extension = mimeType.includes("jpeg") ? ".jpg" : ".png";
-        const tempFilePath = path.join(os.tmpdir(), `botimg_${Date.now()}${extension}`);
-        fs.writeFileSync(tempFilePath, mediaBuffer);
-
-        const form = new FormData();
-        form.append("fileToUpload", fs.createReadStream(tempFilePath), `botimage${extension}`);
-        form.append("reqtype", "fileupload");
-
-        const response = await axios.post("https://catbox.moe/user/api.php", form, {
-            headers: form.getHeaders()
-        });
-
-        fs.unlinkSync(tempFilePath);
-
-        if (typeof response.data !== 'string' || !response.data.startsWith('https://')) {
-            throw new Error(`Catbox upload failed: ${response.data}`);
-        }
-
-        imageUrl = response.data;
-    }
-
-    if (!imageUrl || !imageUrl.startsWith("http")) {
-        return reply("❌ Provide a valid image URL or reply to an image.");
-    }
-
-    userConfig.BOT_IMAGE = imageUrl;
-    await updateUserConfig(sanitizedNumber, userConfig);
-    
-    await conn.sendMessage(from, {
-        image: { url: imageUrl },
-        caption: `✅ *Bot Display Picture Updated!*\n\n📁 *Image URL:* ${imageUrl}\n\nImage will be used as bot's profile picture.`
-    }, { quoted: mek });
-});
-
-// ===============================
 // STICKER NAME COMMAND
 // ===============================
 cmd({
@@ -1300,7 +1323,7 @@ async (conn, mek, m, { from, reply, isCreator, prefix, userConfig }) => {
 │ • autotyping on/off
 │ • online on/off
 │
-│ 📁 *Moderation*
+│ 📁 *settings*
 │ • ban @user
 │ • unban @user
 │ • banlist
