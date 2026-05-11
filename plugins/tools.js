@@ -7,9 +7,9 @@ import path from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Helper function to upload to Uguu then Catbox (same as url command)
-async function uploadToCatbox(buffer, mimeType) {
-    // Extension mapping (same as url command)
+// Helper function to upload to Uguu only
+async function uploadToUguu(buffer, mimeType) {
+    // Extension mapping
     let extension = '';
     if (mimeType.includes('image/jpeg')) extension = '.jpg';
     else if (mimeType.includes('image/png')) extension = '.png';
@@ -18,11 +18,10 @@ async function uploadToCatbox(buffer, mimeType) {
 
     const fileName = `image${extension}`;
 
-    // STEP 1: Upload to Uguu
     const form = new FormData();
     form.append('files[]', buffer, fileName);
 
-    const uguuResponse = await axios.post("https://uguu.se/upload", form, {
+    const response = await axios.post("https://uguu.se/upload", form, {
         headers: {
             ...form.getHeaders(),
             "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile)"
@@ -30,32 +29,16 @@ async function uploadToCatbox(buffer, mimeType) {
         timeout: 60000
     });
 
-    let uguuUrl = null;
-    if (uguuResponse.data && uguuResponse.data.files && uguuResponse.data.files[0]) {
-        uguuUrl = uguuResponse.data.files[0].url;
+    let imageUrl = null;
+    if (response.data && response.data.files && response.data.files[0]) {
+        imageUrl = response.data.files[0].url;
     }
 
-    if (!uguuUrl) {
-        throw new Error("Uguu upload failed - no URL returned");
+    if (!imageUrl) {
+        throw new Error("Failed to upload image to Uguu");
     }
 
-    // STEP 2: Upload to Catbox via URL method
-    const catboxForm = new FormData();
-    catboxForm.append('reqtype', 'urlupload');
-    catboxForm.append('userhash', '');
-    catboxForm.append('url', uguuUrl);
-
-    const catboxResponse = await axios.post("https://catbox.moe/user/api.php", catboxForm, {
-        headers: catboxForm.getHeaders()
-    });
-
-    const catboxUrl = catboxResponse.data?.trim();
-
-    if (!catboxUrl || !catboxUrl.startsWith('https://files.catbox.moe/')) {
-        throw new Error(`Catbox rejected the URL. Response: ${catboxUrl || 'empty'}`);
-    }
-
-    return catboxUrl;
+    return imageUrl;
 }
 
 // Helper function for upscale/enhance commands
@@ -69,7 +52,7 @@ async function processImageCommand(conn, mek, m, from, reply, resolusi, commandN
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/upscale?url=${encodedUrl}&resolusi=${resolusi}`;
@@ -283,7 +266,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/unblur?url=${encodedUrl}`;
@@ -319,7 +302,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/blurface?url=${encodedUrl}`;
@@ -355,7 +338,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/removebg?url=${encodedUrl}`;
@@ -390,7 +373,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/v1/removebg?url=${encodedUrl}`;
@@ -426,7 +409,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/remini?url=${encodedUrl}`;
@@ -462,7 +445,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/enhancer?url=${encodedUrl}&resolusi=1`;
@@ -497,7 +480,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/enhancer?url=${encodedUrl}&resolusi=4`;
@@ -532,7 +515,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/enhancer?url=${encodedUrl}&resolusi=8`;
@@ -567,7 +550,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/enhancer?url=${encodedUrl}&resolusi=16`;
@@ -603,7 +586,7 @@ cmd({
         await conn.sendMessage(from, { react: { text: "⏳", key: mek.key } });
         
         const mediaBuffer = await q.download();
-        const imageUrl = await uploadToCatbox(mediaBuffer, mime);
+        const imageUrl = await uploadToUguu(mediaBuffer, mime);
         const encodedUrl = encodeURIComponent(imageUrl);
         
         const apiUrl = `https://api.nexray.web.id/tools/colorize?url=${encodedUrl}`;
