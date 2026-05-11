@@ -1,4 +1,3 @@
-// Fixed Setting ✅ 
 import { fileURLToPath } from 'url';
 import { cmd } from '../command.js';
 import config from '../config.js';
