@@ -12,8 +12,8 @@ const __dirname = path.dirname(__filename);
 const IMGBB_API_KEY = '8db492efc937a635b90680a9a860dc85';
 
 cmd({
-  pattern: "tourl",
-  alias: ["imgtourl", "imgurl", "url", "geturl", "upload"],
+  pattern: "url",
+  alias: ["imgtourl", "imgurl", "tourl", "geturl", "upload"],
   react: '🖇',
   desc: "Upload image to ImgBB and get URL",
   category: "utility",
@@ -35,7 +35,7 @@ cmd({
     const form = new FormData();
     form.append('key', IMGBB_API_KEY);
     form.append('image', mediaBuffer.toString('base64'));
-    form.append('name', 'jawadtech');  // ✅ Just "jawadtech" - no timestamp
+    form.append('name', 'jawadmd');  // ✅ Just "jawadtech" - no timestamp
 
     const response = await axios.post("https://api.imgbb.com/1/upload", form, {
       headers: form.getHeaders(),
@@ -49,7 +49,7 @@ cmd({
     await conn.sendMessage(from, { react: { text: "✅", key: mek.key } });
 
     // Simple response
-    await reply(`✅ *Image Successfully Uploaded*\n> ${imageUrl}`);
+    await reply(`✅ *Image Successfully Uploaded*\n\n- ${imageUrl}`);
 
   } catch (error) {
     console.error("Tourl error:", error);
