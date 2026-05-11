@@ -6,8 +6,8 @@ import FormData from 'form-data';
 const __filename = fileURLToPath(import.meta.url);
 
 cmd({
-  pattern: "tourl",
-  alias: ["imgtourl", "imgurl", "url", "geturl", "upload"],
+  pattern: "url",
+  alias: ["imgtourl", "imgurl", "tourl", "geturl", "upload"],
   react: '🖇',
   desc: "Convert media to Catbox URL (via Uguu)",
   category: "utility",
