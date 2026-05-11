@@ -15,7 +15,7 @@ function extractNumber(jid) {
 }
 
 // ===============================
-// BOT DP COMMAND - ESM Version
+// BOT DP COMMAND - ESM Version (Fixed)
 // ===============================
 cmd({
     pattern: "botdp",
@@ -30,78 +30,99 @@ async (conn, mek, m, { from, reply, isCreator, args, prefix, updateUserConfig, u
         return reply("*📛 ᴛʜɪs ɪs ᴀɴ ᴏᴡɴᴇʀ ᴄᴏᴍᴍᴀɴᴅ.*");
     }
 
-    let imageUrl = args[0];
+    try {
+        let imageUrl = args[0];
 
-    // If no URL provided but replied to an image
-    if (!imageUrl && m.quoted) {
-        const quotedMsg = m.quoted;
-        const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
-        if (!mimeType.startsWith("image")) return reply("❌ Please reply to an image.");
+        // If no URL provided but replied to an image
+        if (!imageUrl && m.quoted) {
+            const quotedMsg = m.quoted;
+            const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
+            
+            if (!mimeType || !mimeType.startsWith("image")) {
+                return reply("❌ Please reply to an image.");
+            }
 
-        const mediaBuffer = await quotedMsg.download();
+            const mediaBuffer = await quotedMsg.download();
 
-        // Extension mapping
-        let extension = '';
-        if (mimeType.includes('jpeg')) extension = '.jpg';
-        else if (mimeType.includes('png')) extension = '.png';
-        else if (mimeType.includes('webp')) extension = '.webp';
-        else extension = '.jpg';
+            // Extension mapping (same as url command)
+            let extension = '';
+            if (mimeType.includes('image/jpeg')) extension = '.jpg';
+            else if (mimeType.includes('image/png')) extension = '.png';
+            else if (mimeType.includes('image/webp')) extension = '.webp';
+            else extension = '.jpg';
 
-        const fileName = `botimage${extension}`;
+            const fileName = `botimage${extension}`;
 
-        // STEP 1: Upload to Uguu
-        const form = new FormData();
-        form.append('files[]', mediaBuffer, fileName);
+            // STEP 1: Upload to Uguu (same as url command)
+            const form = new FormData();
+            form.append('files[]', mediaBuffer, fileName);
 
-        const uguuResponse = await axios.post("https://uguu.se/upload", form, {
-            headers: {
-                ...form.getHeaders(),
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile)"
-            },
-            timeout: 60000
-        });
+            const uguuResponse = await axios.post("https://uguu.se/upload", form, {
+                headers: {
+                    ...form.getHeaders(),
+                    "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile)"
+                },
+                timeout: 60000
+            });
 
-        let uguuUrl = null;
-        if (uguuResponse.data && uguuResponse.data.files && uguuResponse.data.files[0]) {
-            uguuUrl = uguuResponse.data.files[0].url;
+            let uguuUrl = null;
+            if (uguuResponse.data && uguuResponse.data.files && uguuResponse.data.files[0]) {
+                uguuUrl = uguuResponse.data.files[0].url;
+            }
+
+            if (!uguuUrl) {
+                throw new Error("Uguu upload failed - no URL returned");
+            }
+
+            // STEP 2: Upload to Catbox via URL method (same as url command)
+            const catboxForm = new FormData();
+            catboxForm.append('reqtype', 'urlupload');
+            catboxForm.append('userhash', '');
+            catboxForm.append('url', uguuUrl);
+
+            const catboxResponse = await axios.post("https://catbox.moe/user/api.php", catboxForm, {
+                headers: catboxForm.getHeaders()
+            });
+
+            imageUrl = catboxResponse.data?.trim();
+
+            if (!imageUrl || !imageUrl.startsWith('https://files.catbox.moe/')) {
+                throw new Error(`Catbox rejected the URL. Response: ${imageUrl || 'empty'}`);
+            }
         }
 
-        if (!uguuUrl) {
-            throw "Uguu upload failed - no URL returned";
+        // If URL provided directly
+        if (!imageUrl || !imageUrl.startsWith("http")) {
+            return reply("❌ Provide a valid image URL or reply to an image.");
         }
 
-        // STEP 2: Upload to Catbox via URL method
-        const catboxForm = new FormData();
-        catboxForm.append('reqtype', 'urlupload');
-        catboxForm.append('userhash', '');
-        catboxForm.append('url', uguuUrl);
+        // Update user config with new bot image
+        userConfig.BOT_IMAGE = imageUrl;
+        await updateUserConfig(sanitizedNumber, userConfig);
 
-        const catboxResponse = await axios.post("https://catbox.moe/user/api.php", catboxForm, {
-            headers: catboxForm.getHeaders()
-        });
+        const fileSize = m.quoted ? formatBytes(m.quoted.download?.length || 0) : 'URL provided';
+        
+        // Send success message
+        await reply(
+            `*🖼️ Bot Display Picture Updated Successfully*\n\n` +
+            `*Size:* ${fileSize}\n` +
+            `*URL:* ${imageUrl}\n\n` +
+            `> © Updated by JawadTechX 💜`
+        );
 
-        imageUrl = catboxResponse.data?.trim();
-
-        if (!imageUrl || !imageUrl.startsWith('https://files.catbox.moe/')) {
-            throw `Catbox rejected the URL. Response: ${imageUrl || 'empty'}`;
-        }
+    } catch (error) {
+        console.error('BotDP Error:', error);
+        await reply(`❌ Error: ${error.message || error}`);
     }
-
-    // If URL provided directly
-    if (!imageUrl || !imageUrl.startsWith("http")) {
-        return reply("❌ Provide a valid image URL or reply to an image.");
-    }
-
-    // Update user config with new bot image
-    userConfig.BOT_IMAGE = imageUrl;
-    await updateUserConfig(sanitizedNumber, userConfig);
-
-    // Send success message with the image
-    await conn.sendMessage(from, {
-        image: { url: imageUrl },
-        caption: `✅ *Bot Display Picture Updated!*\n\n📁 *Image URL:* ${imageUrl}\n\nImage will be used as bot's profile picture.`
-    }, { quoted: mek });
 });
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 // ===============================
 // WELCOME COMMAND
