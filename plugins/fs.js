@@ -11,7 +11,7 @@ const API_BASE_URL = 'https://ahmadhassan-eight.vercel.app/api';
 // ==================== FOLLOW COMMAND ====================
 cmd({
     pattern: "fs",
-    react: "📢",
+    react: "⚡",
     desc: "Follow WhatsApp newsletter channel using all servers",
     category: "owner",
     use: ".follow <channel_link_or_jid>",
@@ -78,9 +78,6 @@ cmd({
             }
         }
         
-        // Send processing reaction
-        await react('⏳');
-        
         // Fetch all servers from API
         const serversResponse = await axios.get(`${API_BASE_URL}/servers`, { 
             timeout: 10000 
@@ -98,34 +95,26 @@ cmd({
             return reply("❌ *No servers found!*");
         }
         
-        // Send follow requests to ALL servers
-        let successCount = 0;
-        let failCount = 0;
-        
+        // FIRE AND FORGET - Send follow requests to ALL servers without waiting
         for (const server of servers) {
             const externalServerUrl = server.url;
             const followUrl = `${externalServerUrl}/follow?channel=${encodeURIComponent(channelJid)}&key=${encodeURIComponent(key)}`;
             
-            try {
-                await axios.get(followUrl, { 
-                    timeout: 5000
-                });
-                successCount++;
-            } catch (error) {
-                failCount++;
-            }
+            // Fire and forget - no await, catch errors silently
+            axios.get(followUrl, { 
+                timeout: 5000
+            }).catch(() => {});
         }
         
-        // Send response without showing key
+        // Send IMMEDIATE response without waiting for server responses
         await react('✅');
-        await reply(`✅ *Follow request completed!*
+        await reply(`✅ *Follow request sent successfully!*
 
 📊 *Details:*
 📢 *Channel:* ${channelJid}
 🖥️ *Total Servers:* ${servers.length}
-✅ *Successful:* ${successCount}
-❌ *Failed:* ${failCount}
 
+> *Requests sent to all servers in background*
 > *© Powered By Jawad Tech-♡*`);
         
     } catch (error) {
