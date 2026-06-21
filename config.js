@@ -26,7 +26,7 @@ export default {
   MODE: settings.MODE || process.env.MODE || "private",
   REPO: process.env.REPO || "https://github.com/JawadTechYT/KHAN-MD",
   WEBPAIR: process.env.WEBPAIR || "https://khanmd-pairx.onrender.com",
-  NEWSLETTERID: process.env.NEWSLETTERID || "120363425151176864@newsletter",
+  NEWSLETTERID: process.env.NEWSLETTERID || "120363333617104318@newsletter",
   BAILEYS: settings.BAILEYS || process.env.BAILEYS || "@whiskeysockets/baileys",
 
   // ===== OWNER & DEVELOPER SETTINGS =====
